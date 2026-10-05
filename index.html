@@ -171,13 +171,29 @@
     </div>
 
     <script>
-        const TOTAL_IMAGES = 96; // Bạn có thể chỉnh lại số này cho khớp với số lượng ảnh thật
+        // ==========================================
+        // CẤU HÌNH THUẬT TOÁN XÁO TRỘN ẢNH (SHUFFLE ALGORITHM)
+        // ==========================================
+        const TOTAL_IMAGES = 90; // Sửa tổng số ảnh thành 90
+        let shuffledImages = [];
+
+        // Tạo danh sách từ 1 đến 90
+        for (let i = 1; i <= TOTAL_IMAGES; i++) {
+            shuffledImages.push(i);
+        }
+
+        // Xáo trộn mảng (Fisher-Yates Shuffle)
+        for (let i = shuffledImages.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffledImages[i], shuffledImages[j]] = [shuffledImages[j], shuffledImages[i]];
+        }
 
         function getImg(id) { 
-            const imgNumber = (id % TOTAL_IMAGES) + 1;
-            // Thay đổi cấu trúc tên file tại đây: lấy file định dạng "1 (1).jpg", "1 (2).jpg",...
+            // id % TOTAL_IMAGES đảm bảo khi gọi quá 90 lần, nó sẽ lặp lại mảng xáo trộn từ đầu
+            const imgNumber = shuffledImages[id % TOTAL_IMAGES];
             return `images/1 (${imgNumber}).jpg`; 
         }
+        // ==========================================
 
         function initParticles() {
             const container = document.getElementById('particles-container');
@@ -294,7 +310,7 @@
             const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }); renderer.setSize(window.innerWidth, window.innerHeight); container.appendChild(renderer.domElement);
             const sphereGroup = new THREE.Group(); scene.add(sphereGroup); const imageMeshes = [];
             
-            let imageCounter = 0;
+            let imageCounter = 12; // Tiếp tục lấy ảnh từ mảng sau trang sách
             let delayTime = 0; 
 
             for(let i = 0; i < 16; i++) {
@@ -363,7 +379,7 @@
         let stage4Inited = false;
         function initStage4() {
             if(stage4Inited) return; stage4Inited = true;
-            let imgCount = 10;
+            let imgCount = 300; // Đặt một số bất kỳ để lấy các ảnh ngẫu nhiên tiếp theo
             for(let row=1; row<=3; row++) {
                 const wrapper = document.getElementById(`marquee-row-${row}`); const contents = wrapper.querySelectorAll('.marquee-content'); let imgs = '';
                 for(let i=0; i<8; i++) { 
