@@ -1,4 +1,4 @@
-const TOTAL_IMAGES = 90; 
+const TOTAL_IMAGES = 90; // Sửa số này đúng với số ảnh bạn có
 let shuffledImages = [];
 for (let i = 1; i <= TOTAL_IMAGES; i++) shuffledImages.push(i);
 for (let i = shuffledImages.length - 1; i > 0; i--) {
@@ -11,46 +11,53 @@ function getImg(id) {
     return `images/1(${imgNumber}).jpg`; 
 }
 
-// BỘ LỌC TỰ PHỤC HỒI (Self-healing Filter)
-// Nếu ảnh hỏng, tự động tìm ảnh khác đắp vào
-async function getWorkingImage(targetId) {
-    let attempts = 0;
-    let currentId = targetId;
-    
-    // Thử tối đa 10 lần để tìm một bức ảnh lành lặn
-    while (attempts < 100) { 
-        const url = getImg(currentId);
-        try {
-            const response = await fetch(url);
-            if (response.ok) {
-                const blob = await response.blob();
-                // Nếu file lớn hơn 10 byte (không phải file rác) -> Thành công
-                if (blob.size >= 10) {
-                    return { safeUrl: URL.createObjectURL(blob), originalUrl: url };
+const knownGoodImages = [];
+
+function getWorkingImage(targetId) {
+    return new Promise((resolve) => {
+        let attempts = 0;
+        let currentId = targetId;
+
+        function tryLoad() {
+            if (attempts > 15) {
+                if (knownGoodImages.length > 0) {
+                    resolve(knownGoodImages[Math.floor(Math.random() * knownGoodImages.length)]);
+                } else {
+                    resolve('https://picsum.photos/400?blur=2');
                 }
+                return;
             }
-        } catch (error) {}
-        
-        // Bốc ngẫu nhiên (random) một ảnh khác để thử lại
-        currentId = Math.floor(Math.random() * TOTAL_IMAGES);
-        attempts++;
-    }
-    
-    // Phương án dự phòng (fallback) cuối cùng nếu 10 lần đều xịt
-    return { safeUrl: 'https://picsum.photos/400?blur=2', originalUrl: null };
+
+            const url = getImg(currentId);
+            const img = new Image();
+            
+            img.onload = () => {
+                if (!knownGoodImages.includes(url)) knownGoodImages.push(url);
+                resolve(url);
+            };
+            
+            img.onerror = () => {
+                attempts++;
+                currentId = Math.floor(Math.random() * TOTAL_IMAGES);
+                tryLoad(); 
+            };
+            img.src = url;
+        }
+        tryLoad();
+    });
 }
 
-function preloadImages(startIndex, count) {
-    for (let i = 0; i < count; i++) {
-        fetch(getImg(startIndex + i)).catch(()=>{});
-    }
-}
-window.onload = () => { preloadImages(0, 40); };
+// ĐÃ XÓA HOÀN TOÀN TÍNH NĂNG TẢI NGẦM TRƯỚC (PRELOAD) TRÊN WINDOW.ONLOAD 
+// ĐỂ CỨU ĐIỆN THOẠI KHỎI BỊ SẬP VÀ MỞ LINK SIÊU TỐC.
 
 function initParticles() {
     const container = document.getElementById('particles-container');
     const symbols = ['♥', '✧', '★', '。'];
-    for(let i=0; i<80; i++) {
+    // Giảm số hạt bay trên điện thoại (isMobile) xuống còn 25 để tránh giật lag
+    const isMobile = window.innerWidth < 768;
+    const particleCount = isMobile ? 25 : 80; 
+    
+    for(let i=0; i < particleCount; i++) {
         let p = document.createElement('div');
         p.className = 'particle';
         p.textContent = symbols[Math.floor(Math.random() * symbols.length)];
@@ -116,22 +123,32 @@ function initStage2() {
     if(stage2Inited) return; stage2Inited = true;
     const container = document.getElementById('gallery-container');
     const nextBtnWrap = document.getElementById('next-btn-wrapper');
-    
     container.removeChild(nextBtnWrap);
 
+    // THAY ĐỔI LỚN TẠI CẢNH 2: Khóa chặt thứ tự bằng Khung Chờ (Skeleton Loader)
     for(let i = 0; i < 10; i++) {
-        getWorkingImage(i).then(({safeUrl, originalUrl}) => {
-            const item = document.createElement('div');
-            item.className = 'gallery-item';
-            // Click vào ảnh sẽ hiện đúng ảnh đang xem
-            const clickSrc = originalUrl ? originalUrl : safeUrl; 
-            
-            item.innerHTML = `
-                <img src="${safeUrl}" class="gallery-img" loading="lazy" onclick="openLightbox('${clickSrc}')">
-                <div class="gallery-caption">Kỷ niệm ${i + 1}</div>
-            `;
-            container.appendChild(item);
-            setTimeout(() => { item.classList.add('show'); }, 150 * i);
+        // 1. Dựng sẵn khung cứng vào HTML ngay lập tức để giữ đúng thứ tự 1->10
+        const item = document.createElement('div');
+        item.className = 'gallery-item show';
+        item.innerHTML = `
+            <div class="img-skeleton" id="skel-${i}">Đang tìm ảnh đẹp nhất...</div>
+            <img id="gal-img-${i}" class="gallery-img" style="display:none;" loading="lazy">
+            <div class="gallery-caption">Kỷ niệm ${i + 1}</div>
+        `;
+        container.appendChild(item);
+
+        // 2. Chờ ảnh tải xong thì đắp vào đúng cái khung có ID tương ứng
+        getWorkingImage(i).then(safeUrl => {
+            const imgEl = document.getElementById(`gal-img-${i}`);
+            const skelEl = document.getElementById(`skel-${i}`);
+            if(imgEl && skelEl) {
+                imgEl.src = safeUrl;
+                imgEl.onload = () => {
+                    skelEl.style.display = 'none'; // Xóa khung chờ
+                    imgEl.style.display = 'block'; // Hiện ảnh thật
+                    imgEl.onclick = () => openLightbox(safeUrl);
+                };
+            }
         });
     }
     
@@ -179,7 +196,7 @@ function initStage3() {
             const geo = new THREE.SphereGeometry(3, 4, 4, phiStart + gap/2, phiLength - gap, thetaStart + gap/2, thetaLength - gap);
             
             const mesh = new THREE.Mesh(geo, placeholderMat.clone());
-            mesh.userData.imgId = imageCounter++; // Lưu lại ID để tìm ảnh
+            mesh.userData.imgId = imageCounter++; 
             
             sphereGroup.add(mesh); imageMeshes.push(mesh);
         }
@@ -190,15 +207,14 @@ function initStage3() {
         if (loadIndex >= imageMeshes.length) return;
         const mesh = imageMeshes[loadIndex++];
         
-        // Gọi bộ lọc tự động trám ảnh
-        getWorkingImage(mesh.userData.imgId).then(({safeUrl, originalUrl}) => {
+        getWorkingImage(mesh.userData.imgId).then(safeUrl => {
             textureLoader.load(safeUrl, 
                 (texture) => {
                     texture.minFilter = THREE.LinearFilter;
                     mesh.material.color.setHex(0xffffff); 
                     mesh.material.map = texture;
                     mesh.material.needsUpdate = true;
-                    if (originalUrl) mesh.userData.src = originalUrl;
+                    mesh.userData.src = safeUrl; 
                     setTimeout(loadNextImage, 0);
                 },
                 undefined,
@@ -207,7 +223,8 @@ function initStage3() {
         });
     }
     
-    for(let k = 0; k < 8; k++) { loadNextImage(); }
+    // Đã hạ từ 8 luồng xuống 3 luồng để tiết kiệm RAM cho thiết bị di động
+    for(let k = 0; k < 3; k++) { loadNextImage(); }
 
     let isDragging = false; 
     let startXY = {x: 0, y: 0}, lastXY = {x: 0, y: 0}; 
@@ -295,9 +312,8 @@ function initStage4() {
         
         for(let i=0; i<6; i++) { 
             const currentId = imgCount++;
-            getWorkingImage(currentId).then(({safeUrl, originalUrl}) => {
-                const clickSrc = originalUrl ? originalUrl : safeUrl;
-                const imgHtml = `<img src="${safeUrl}" loading="lazy" onclick="openLightbox('${clickSrc}')">`; 
+            getWorkingImage(currentId).then(safeUrl => {
+                const imgHtml = `<img src="${safeUrl}" loading="lazy" onclick="openLightbox('${safeUrl}')">`; 
                 contents[0].innerHTML += imgHtml; 
                 contents[1].innerHTML += imgHtml;
             });
