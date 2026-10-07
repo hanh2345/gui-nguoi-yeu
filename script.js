@@ -11,12 +11,18 @@ function getImg(id) {
     return `images/1(${imgNumber}).jpg`; 
 }
 
+// Hàm tải ảnh ngầm (Cache images in background)
 function preloadImages(startIndex, count) {
     for (let i = 0; i < count; i++) {
         const img = new Image();
         img.src = getImg(startIndex + i);
     }
 }
+
+// Bắt đầu tải trước 40 ảnh ngay khi web vừa mở lên (giúp Stage 2 và Stage 3 tải siêu tốc)
+window.onload = () => {
+    preloadImages(0, 40);
+};
 
 function initParticles() {
     const container = document.getElementById('particles-container');
@@ -72,7 +78,6 @@ function checkPassword() {
         document.getElementById('password-modal').classList.remove('active');
         audio.play().then(() => { isPlaying = true; musicBtn.classList.add('show', 'playing'); }).catch(e => console.log("Audio play blocked", e));
         
-        preloadImages(0, 30); 
         openEnvelope();
     } else {
         errorMsg.innerText = "Sai rồi ngốc ạ! Thử lại xem nào."; document.getElementById('pwd-input').value = "";
@@ -97,8 +102,9 @@ function initStage2() {
         item.className = 'gallery-item';
         const src = getImg(i);
         
+        // Thêm tính năng ảnh dự phòng (fallback fallback): Nếu ảnh hỏng, tự thay bằng ảnh xám để web không bị xấu
         item.innerHTML = `
-            <img src="${src}" class="gallery-img" loading="lazy" decoding="async" onclick="openLightbox('${src}')" onerror="this.style.display='none'">
+            <img src="${src}" class="gallery-img" loading="lazy" decoding="async" onclick="openLightbox('${src}')" onerror="this.src='https://picsum.photos/400?blur=2'">
             <div class="gallery-caption">Kỷ niệm ${i + 1}</div>
         `;
         container.appendChild(item);
@@ -169,14 +175,22 @@ function initStage3() {
                 mesh.material.color.setHex(0xffffff); 
                 mesh.material.map = texture;
                 mesh.material.needsUpdate = true;
-                setTimeout(loadNextImage, 15);
+                // Tải liên tiếp không cần chờ (0ms delay) để tối ưu tốc độ
+                setTimeout(loadNextImage, 0);
             },
             undefined,
-            (err) => { setTimeout(loadNextImage, 15); } 
+            (err) => { 
+                // Nếu ảnh bị lỗi 404, đánh dấu màu tối để nhận biết và tải tiếp
+                mesh.material.color.setHex(0x222222);
+                setTimeout(loadNextImage, 0); 
+            } 
         );
     }
-    loadNextImage(); 
-    loadNextImage(); 
+    
+    // TĂNG TỐC ĐỘ TẢI LÊN GẤP 4 LẦN BẰNG CÁCH MỞ 8 LUỒNG SONG SONG (8 Concurrent Threads)
+    for(let k = 0; k < 8; k++) {
+        loadNextImage();
+    }
 
     let isDragging = false; 
     let startXY = {x: 0, y: 0}, lastXY = {x: 0, y: 0}; 
@@ -245,7 +259,7 @@ function initStage3() {
     function animate() { 
         requestAnimationFrame(animate); 
         if(!isDragging) sphereGroup.rotation.y += 0.001; 
-        renderer3D.render(scene, camera3D); 
+        try { renderer3D.render(scene, camera3D); } catch(e) {}
     } 
     animate();
     
@@ -255,17 +269,16 @@ function initStage3() {
 let stage4Inited = false;
 function initStage4() {
     if(stage4Inited) return; stage4Inited = true;
-    let imgCount = 30; // Chỉnh lại ảnh bắt đầu để tránh bị lặp lại
+    let imgCount = 50; 
     
     for(let row=1; row<=3; row++) {
         const wrapper = document.getElementById(`marquee-row-${row}`); 
         const contents = wrapper.querySelectorAll('.marquee-content'); 
         let imgs = '';
         
-        // ĐÃ GIẢM BỚT SỐ LƯỢNG ẢNH TRONG VÒNG LẶP XUỐNG CÒN 6 ẢNH/ĐOẠN ĐỂ CHỐNG NGỢP
         for(let i=0; i<6; i++) { 
             const src = getImg(imgCount++); 
-            imgs += `<img src="${src}" loading="lazy" decoding="async" onclick="openLightbox('${src}')" onerror="this.style.display='none'">`; 
+            imgs += `<img src="${src}" loading="lazy" decoding="async" onclick="openLightbox('${src}')" onerror="this.src='https://picsum.photos/400?blur=2'">`; 
         }
         contents[0].innerHTML = imgs; contents[1].innerHTML = imgs;
     }
