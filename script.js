@@ -1,42 +1,30 @@
 const TOTAL_IMAGES = 90; 
-let shuffledImages = [];
-for (let i = 1; i <= TOTAL_IMAGES; i++) shuffledImages.push(i);
-for (let i = shuffledImages.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffledImages[i], shuffledImages[j]] = [shuffledImages[j], shuffledImages[i]];
-}
 
+// Hàm lấy ảnh theo đúng thứ tự (Đã bỏ thuật toán xáo trộn và sửa lại dấu cách ở tên file)
 function getImg(id) { 
-    const imgNumber = shuffledImages[id % TOTAL_IMAGES];
-    return `images/1(${imgNumber}).jpg`; 
+    const imgNumber = (id % TOTAL_IMAGES) + 1;
+    return `images/1 (${imgNumber}).jpg`; 
 }
 
 // BỘ LỌC TỰ PHỤC HỒI (Self-healing Filter)
-// Nếu ảnh hỏng, tự động tìm ảnh khác đắp vào
 async function getWorkingImage(targetId) {
     let attempts = 0;
     let currentId = targetId;
     
-    // Thử tối đa 10 lần để tìm một bức ảnh lành lặn
     while (attempts < 10) { 
         const url = getImg(currentId);
         try {
             const response = await fetch(url);
             if (response.ok) {
                 const blob = await response.blob();
-                // Nếu file lớn hơn 10 byte (không phải file rác) -> Thành công
                 if (blob.size >= 10) {
                     return { safeUrl: URL.createObjectURL(blob), originalUrl: url };
                 }
             }
         } catch (error) {}
-        
-        // Bốc ngẫu nhiên (random) một ảnh khác để thử lại
         currentId = Math.floor(Math.random() * TOTAL_IMAGES);
         attempts++;
     }
-    
-    // Phương án dự phòng (fallback) cuối cùng nếu 10 lần đều xịt
     return { safeUrl: 'https://picsum.photos/400?blur=2', originalUrl: null };
 }
 
@@ -111,31 +99,33 @@ function openEnvelope() {
     setTimeout(() => { document.getElementById('env-wrapper').classList.add('zoom-out'); setTimeout(() => goToStage(2), 700); }, 400);
 }
 
+// Hàm initStage2 đã dùng Promise.all để ảnh hiện đúng thứ tự và không đè nút
 let stage2Inited = false;
-function initStage2() {
+async function initStage2() {
     if(stage2Inited) return; stage2Inited = true;
-    const container = document.getElementById('gallery-container');
-    const nextBtnWrap = document.getElementById('next-btn-wrapper');
     
-    container.removeChild(nextBtnWrap);
-
+    const imgContainer = document.getElementById('gallery-images');
+    
+    const loadPromises = [];
     for(let i = 0; i < 10; i++) {
-        getWorkingImage(i).then(({safeUrl, originalUrl}) => {
-            const item = document.createElement('div');
-            item.className = 'gallery-item';
-            // Click vào ảnh sẽ hiện đúng ảnh đang xem
-            const clickSrc = originalUrl ? originalUrl : safeUrl; 
-            
-            item.innerHTML = `
-                <img src="${safeUrl}" class="gallery-img" loading="lazy" onclick="openLightbox('${clickSrc}')">
-                <div class="gallery-caption">Kỷ niệm ${i + 1}</div>
-            `;
-            container.appendChild(item);
-            setTimeout(() => { item.classList.add('show'); }, 150 * i);
-        });
+        loadPromises.push(getWorkingImage(i));
     }
     
-    container.appendChild(nextBtnWrap);
+    const results = await Promise.all(loadPromises);
+    
+    results.forEach((res, i) => {
+        const item = document.createElement('div');
+        item.className = 'gallery-item';
+        const clickSrc = res.originalUrl ? res.originalUrl : res.safeUrl; 
+        
+        item.innerHTML = `
+            <img src="${res.safeUrl}" class="gallery-img" loading="lazy" onclick="openLightbox('${clickSrc}')">
+            <div class="gallery-caption">Kỷ niệm ${i + 1}</div>
+        `;
+        imgContainer.appendChild(item);
+        setTimeout(() => { item.classList.add('show'); }, 150 * i);
+    });
+    
     setTimeout(() => { document.getElementById('btn-next-2').classList.add('show'); }, 1500);
 }
 
