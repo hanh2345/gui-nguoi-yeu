@@ -11,30 +11,35 @@ function getImg(id) {
     return `images/1(${imgNumber}).jpg`; 
 }
 
-// BỘ LỌC ẢNH THÔNG MINH: Có bật tính năng cảnh báo (Warning)
-async function fetchImageSafe(url) {
-    try {
-        const response = await fetch(url);
-        if (!response.ok) {
-            console.warn(`⚠️ [Thiếu ảnh] Không tìm thấy file (có thể sai tên hoặc chưa up): ${url}`);
-            return null;
-        }
-        const blob = await response.blob();
+// BỘ LỌC TỰ PHỤC HỒI (Self-healing Filter)
+// Nếu ảnh hỏng, tự động tìm ảnh khác đắp vào
+async function getWorkingImage(targetId) {
+    let attempts = 0;
+    let currentId = targetId;
+    
+    // Thử tối đa 10 lần để tìm một bức ảnh lành lặn
+    while (attempts < 10) { 
+        const url = getImg(currentId);
+        try {
+            const response = await fetch(url);
+            if (response.ok) {
+                const blob = await response.blob();
+                // Nếu file lớn hơn 10 byte (không phải file rác) -> Thành công
+                if (blob.size >= 10) {
+                    return { safeUrl: URL.createObjectURL(blob), originalUrl: url };
+                }
+            }
+        } catch (error) {}
         
-        // Nếu kích thước bé hơn 10 byte (file hỏng), từ chối tải lên
-        if (blob.size < 100) {
-            console.warn(`🛑 [File hỏng] File này bị lỗi 2 byte trên GitHub: ${url}`);
-            return null;
-        }
-        
-        return URL.createObjectURL(blob);
-    } catch (error) {
-        console.warn(`❌ [Lỗi mạng] Không thể tải: ${url}`);
-        return null;
+        // Bốc ngẫu nhiên (random) một ảnh khác để thử lại
+        currentId = Math.floor(Math.random() * TOTAL_IMAGES);
+        attempts++;
     }
+    
+    // Phương án dự phòng (fallback) cuối cùng nếu 10 lần đều xịt
+    return { safeUrl: 'https://picsum.photos/400?blur=2', originalUrl: null };
 }
 
-// Tải trước để lưu vào bộ nhớ đệm (Cache)
 function preloadImages(startIndex, count) {
     for (let i = 0; i < count; i++) {
         fetch(getImg(startIndex + i)).catch(()=>{});
@@ -115,20 +120,18 @@ function initStage2() {
     container.removeChild(nextBtnWrap);
 
     for(let i = 0; i < 10; i++) {
-        const src = getImg(i);
-        
-        // Kiểm tra file an toàn trước khi vẽ HTML
-        fetchImageSafe(src).then(safeUrl => {
-            if (safeUrl) { // Bỏ qua nếu file hỏng
-                const item = document.createElement('div');
-                item.className = 'gallery-item';
-                item.innerHTML = `
-                    <img src="${safeUrl}" class="gallery-img" loading="lazy" onclick="openLightbox('${src}')">
-                    <div class="gallery-caption">Kỷ niệm ${i + 1}</div>
-                `;
-                container.appendChild(item);
-                setTimeout(() => { item.classList.add('show'); }, 150 * i);
-            }
+        getWorkingImage(i).then(({safeUrl, originalUrl}) => {
+            const item = document.createElement('div');
+            item.className = 'gallery-item';
+            // Click vào ảnh sẽ hiện đúng ảnh đang xem
+            const clickSrc = originalUrl ? originalUrl : safeUrl; 
+            
+            item.innerHTML = `
+                <img src="${safeUrl}" class="gallery-img" loading="lazy" onclick="openLightbox('${clickSrc}')">
+                <div class="gallery-caption">Kỷ niệm ${i + 1}</div>
+            `;
+            container.appendChild(item);
+            setTimeout(() => { item.classList.add('show'); }, 150 * i);
         });
     }
     
@@ -176,7 +179,7 @@ function initStage3() {
             const geo = new THREE.SphereGeometry(3, 4, 4, phiStart + gap/2, phiLength - gap, thetaStart + gap/2, thetaLength - gap);
             
             const mesh = new THREE.Mesh(geo, placeholderMat.clone());
-            mesh.userData.src = getImg(imageCounter++);
+            mesh.userData.imgId = imageCounter++; // Lưu lại ID để tìm ảnh
             
             sphereGroup.add(mesh); imageMeshes.push(mesh);
         }
@@ -186,26 +189,21 @@ function initStage3() {
     function loadNextImage() {
         if (loadIndex >= imageMeshes.length) return;
         const mesh = imageMeshes[loadIndex++];
-        const originalSrc = mesh.userData.src;
-
-        fetchImageSafe(originalSrc).then(safeUrl => {
-            if (!safeUrl) {
-                // Tàng hình (Invisible) mặt lưới nếu ảnh lỗi
-                mesh.visible = false;
-                setTimeout(loadNextImage, 0);
-            } else {
-                textureLoader.load(safeUrl, 
-                    (texture) => {
-                        texture.minFilter = THREE.LinearFilter;
-                        mesh.material.color.setHex(0xffffff); 
-                        mesh.material.map = texture;
-                        mesh.material.needsUpdate = true;
-                        setTimeout(loadNextImage, 0);
-                    },
-                    undefined,
-                    () => { mesh.visible = false; setTimeout(loadNextImage, 0); } 
-                );
-            }
+        
+        // Gọi bộ lọc tự động trám ảnh
+        getWorkingImage(mesh.userData.imgId).then(({safeUrl, originalUrl}) => {
+            textureLoader.load(safeUrl, 
+                (texture) => {
+                    texture.minFilter = THREE.LinearFilter;
+                    mesh.material.color.setHex(0xffffff); 
+                    mesh.material.map = texture;
+                    mesh.material.needsUpdate = true;
+                    if (originalUrl) mesh.userData.src = originalUrl;
+                    setTimeout(loadNextImage, 0);
+                },
+                undefined,
+                () => { setTimeout(loadNextImage, 0); } 
+            );
         });
     }
     
@@ -296,13 +294,12 @@ function initStage4() {
         const contents = document.getElementById(`marquee-row-${row}`).querySelectorAll('.marquee-content'); 
         
         for(let i=0; i<6; i++) { 
-            const src = getImg(imgCount++); 
-            fetchImageSafe(src).then(safeUrl => {
-                if (safeUrl) { // Chỉ đưa thẻ img vào HTML nếu ảnh an toàn
-                    const imgHtml = `<img src="${safeUrl}" loading="lazy" onclick="openLightbox('${src}')">`; 
-                    contents[0].innerHTML += imgHtml; 
-                    contents[1].innerHTML += imgHtml;
-                }
+            const currentId = imgCount++;
+            getWorkingImage(currentId).then(({safeUrl, originalUrl}) => {
+                const clickSrc = originalUrl ? originalUrl : safeUrl;
+                const imgHtml = `<img src="${safeUrl}" loading="lazy" onclick="openLightbox('${clickSrc}')">`; 
+                contents[0].innerHTML += imgHtml; 
+                contents[1].innerHTML += imgHtml;
             });
         }
     }
