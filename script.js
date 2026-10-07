@@ -8,7 +8,10 @@ for (let i = shuffledImages.length - 1; i > 0; i--) {
 
 function getImg(id) { 
     const imgNumber = shuffledImages[id % TOTAL_IMAGES];
-    return `images/1(${imgNumber}).jpg`; 
+    // Thay dải link URL trang GitHub của bạn vào đây
+    const githubLink = `https://hanh2345.github.io/gui-nguoi-yeu/images/1 (${imgNumber}).jpg`;
+    // Nhờ máy chủ bóp chiều rộng (w) xuống 400px, chất lượng (q) 60%, và ép ra định dạng webp
+    return `https://wsrv.nl/?url=${githubLink}&w=400&q=60&output=webp`;
 }
 
 const knownGoodImages = [];
