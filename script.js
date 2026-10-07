@@ -11,18 +11,30 @@ function getImg(id) {
     return `images/1(${imgNumber}).jpg`; 
 }
 
-// Hàm tải ảnh ngầm (Cache images in background)
-function preloadImages(startIndex, count) {
-    for (let i = 0; i < count; i++) {
-        const img = new Image();
-        img.src = getImg(startIndex + i);
+// BỘ LỌC ẢNH THÔNG MINH: Lấy dữ liệu thô (Blob) và kiểm tra kích thước (Size)
+async function fetchImageSafe(url) {
+    try {
+        const response = await fetch(url);
+        if (!response.ok) return null;
+        const blob = await response.blob();
+        
+        // Nếu kích thước bé hơn 10 byte (file hỏng), từ chối tải lên
+        if (blob.size < 10) return null;
+        
+        // Trả về một đường dẫn ảo, an toàn cho trình duyệt
+        return URL.createObjectURL(blob);
+    } catch (error) {
+        return null;
     }
 }
 
-// Bắt đầu tải trước 40 ảnh ngay khi web vừa mở lên (giúp Stage 2 và Stage 3 tải siêu tốc)
-window.onload = () => {
-    preloadImages(0, 40);
-};
+// Tải trước để lưu vào bộ nhớ đệm (Cache)
+function preloadImages(startIndex, count) {
+    for (let i = 0; i < count; i++) {
+        fetch(getImg(startIndex + i)).catch(()=>{});
+    }
+}
+window.onload = () => { preloadImages(0, 40); };
 
 function initParticles() {
     const container = document.getElementById('particles-container');
@@ -77,7 +89,6 @@ function checkPassword() {
     if (input === CORRECT_PASSWORD) {
         document.getElementById('password-modal').classList.remove('active');
         audio.play().then(() => { isPlaying = true; musicBtn.classList.add('show', 'playing'); }).catch(e => console.log("Audio play blocked", e));
-        
         openEnvelope();
     } else {
         errorMsg.innerText = "Sai rồi ngốc ạ! Thử lại xem nào."; document.getElementById('pwd-input').value = "";
@@ -98,18 +109,21 @@ function initStage2() {
     container.removeChild(nextBtnWrap);
 
     for(let i = 0; i < 10; i++) {
-        const item = document.createElement('div');
-        item.className = 'gallery-item';
         const src = getImg(i);
         
-        // Thêm tính năng ảnh dự phòng (fallback fallback): Nếu ảnh hỏng, tự thay bằng ảnh xám để web không bị xấu
-        item.innerHTML = `
-            <img src="${src}" class="gallery-img" loading="lazy" decoding="async" onclick="openLightbox('${src}')" onerror="this.src='https://picsum.photos/400?blur=2'">
-            <div class="gallery-caption">Kỷ niệm ${i + 1}</div>
-        `;
-        container.appendChild(item);
-        
-        setTimeout(() => { item.classList.add('show'); }, 150 * i);
+        // Kiểm tra file an toàn trước khi vẽ HTML
+        fetchImageSafe(src).then(safeUrl => {
+            if (safeUrl) { // Bỏ qua nếu file hỏng
+                const item = document.createElement('div');
+                item.className = 'gallery-item';
+                item.innerHTML = `
+                    <img src="${safeUrl}" class="gallery-img" loading="lazy" onclick="openLightbox('${src}')">
+                    <div class="gallery-caption">Kỷ niệm ${i + 1}</div>
+                `;
+                container.appendChild(item);
+                setTimeout(() => { item.classList.add('show'); }, 150 * i);
+            }
+        });
     }
     
     container.appendChild(nextBtnWrap);
@@ -144,7 +158,6 @@ function initStage3() {
     
     let imageCounter = 10; 
     const textureLoader = new THREE.TextureLoader(); 
-    
     const placeholderMat = new THREE.MeshBasicMaterial({ color: 0x444444, side: THREE.DoubleSide });
 
     for(let i = 0; i < 9; i++) {
@@ -153,7 +166,6 @@ function initStage3() {
         
         for(let j = 0; j < N; j++) {
             const phiStart = j * (2 * Math.PI / N); const phiLength = 2 * Math.PI / N;
-            
             const gap = 0.05;
             const geo = new THREE.SphereGeometry(3, 4, 4, phiStart + gap/2, phiLength - gap, thetaStart + gap/2, thetaLength - gap);
             
@@ -168,29 +180,30 @@ function initStage3() {
     function loadNextImage() {
         if (loadIndex >= imageMeshes.length) return;
         const mesh = imageMeshes[loadIndex++];
-        
-        textureLoader.load(mesh.userData.src, 
-            (texture) => {
-                texture.minFilter = THREE.LinearFilter;
-                mesh.material.color.setHex(0xffffff); 
-                mesh.material.map = texture;
-                mesh.material.needsUpdate = true;
-                // Tải liên tiếp không cần chờ (0ms delay) để tối ưu tốc độ
+        const originalSrc = mesh.userData.src;
+
+        fetchImageSafe(originalSrc).then(safeUrl => {
+            if (!safeUrl) {
+                // Tàng hình (Invisible) mặt lưới nếu ảnh lỗi
+                mesh.visible = false;
                 setTimeout(loadNextImage, 0);
-            },
-            undefined,
-            (err) => { 
-                // Nếu ảnh bị lỗi 404, đánh dấu màu tối để nhận biết và tải tiếp
-                mesh.material.color.setHex(0x222222);
-                setTimeout(loadNextImage, 0); 
-            } 
-        );
+            } else {
+                textureLoader.load(safeUrl, 
+                    (texture) => {
+                        texture.minFilter = THREE.LinearFilter;
+                        mesh.material.color.setHex(0xffffff); 
+                        mesh.material.map = texture;
+                        mesh.material.needsUpdate = true;
+                        setTimeout(loadNextImage, 0);
+                    },
+                    undefined,
+                    () => { mesh.visible = false; setTimeout(loadNextImage, 0); } 
+                );
+            }
+        });
     }
     
-    // TĂNG TỐC ĐỘ TẢI LÊN GẤP 4 LẦN BẰNG CÁCH MỞ 8 LUỒNG SONG SONG (8 Concurrent Threads)
-    for(let k = 0; k < 8; k++) {
-        loadNextImage();
-    }
+    for(let k = 0; k < 8; k++) { loadNextImage(); }
 
     let isDragging = false; 
     let startXY = {x: 0, y: 0}, lastXY = {x: 0, y: 0}; 
@@ -242,7 +255,9 @@ function initStage3() {
                 if(Math.hypot(dx, dy) < 5) {
                     mouse.x = (e.clientX / window.innerWidth) * 2 - 1; mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
                     raycaster.setFromCamera(mouse, camera3D); const intersects = raycaster.intersectObjects(imageMeshes);
-                    if(intersects.length > 0 && intersects[0].object.userData.src) openLightbox(intersects[0].object.userData.src);
+                    if(intersects.length > 0 && intersects[0].object.visible && intersects[0].object.userData.src) {
+                        openLightbox(intersects[0].object.userData.src);
+                    }
                 }
             }
         }
@@ -272,15 +287,18 @@ function initStage4() {
     let imgCount = 50; 
     
     for(let row=1; row<=3; row++) {
-        const wrapper = document.getElementById(`marquee-row-${row}`); 
-        const contents = wrapper.querySelectorAll('.marquee-content'); 
-        let imgs = '';
+        const contents = document.getElementById(`marquee-row-${row}`).querySelectorAll('.marquee-content'); 
         
         for(let i=0; i<6; i++) { 
             const src = getImg(imgCount++); 
-            imgs += `<img src="${src}" loading="lazy" decoding="async" onclick="openLightbox('${src}')" onerror="this.src='https://picsum.photos/400?blur=2'">`; 
+            fetchImageSafe(src).then(safeUrl => {
+                if (safeUrl) { // Chỉ đưa thẻ img vào HTML nếu ảnh an toàn
+                    const imgHtml = `<img src="${safeUrl}" loading="lazy" onclick="openLightbox('${src}')">`; 
+                    contents[0].innerHTML += imgHtml; 
+                    contents[1].innerHTML += imgHtml;
+                }
+            });
         }
-        contents[0].innerHTML = imgs; contents[1].innerHTML = imgs;
     }
 }
 
