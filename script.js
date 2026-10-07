@@ -11,19 +11,25 @@ function getImg(id) {
     return `images/1(${imgNumber}).jpg`; 
 }
 
-// BỘ LỌC ẢNH THÔNG MINH: Lấy dữ liệu thô (Blob) và kiểm tra kích thước (Size)
+// BỘ LỌC ẢNH THÔNG MINH: Có bật tính năng cảnh báo (Warning)
 async function fetchImageSafe(url) {
     try {
         const response = await fetch(url);
-        if (!response.ok) return null;
+        if (!response.ok) {
+            console.warn(`⚠️ [Thiếu ảnh] Không tìm thấy file (có thể sai tên hoặc chưa up): ${url}`);
+            return null;
+        }
         const blob = await response.blob();
         
         // Nếu kích thước bé hơn 10 byte (file hỏng), từ chối tải lên
-        if (blob.size < 10) return null;
+        if (blob.size < 100) {
+            console.warn(`🛑 [File hỏng] File này bị lỗi 2 byte trên GitHub: ${url}`);
+            return null;
+        }
         
-        // Trả về một đường dẫn ảo, an toàn cho trình duyệt
         return URL.createObjectURL(blob);
     } catch (error) {
+        console.warn(`❌ [Lỗi mạng] Không thể tải: ${url}`);
         return null;
     }
 }
