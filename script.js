@@ -18,7 +18,7 @@ async function getWorkingImage(targetId) {
     let currentId = targetId;
     
     // Thử tối đa 10 lần để tìm một bức ảnh lành lặn
-    while (attempts < 10) { 
+    while (attempts < 100) { 
         const url = getImg(currentId);
         try {
             const response = await fetch(url);
