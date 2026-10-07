@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Hành Trình Tình Yêu</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@500;700&family=Quicksand:wght@300;400;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <audio id="bgMusic" loop src="ngan-nam-anh-sang.mp3"></audio>
+    <div id="music-btn" class="music-btn" onclick="toggleMusic()">🎵</div>
+    <div id="particles-container"></div>
+    <div id="lightbox" onclick="closeLightbox(event)"><img id="lightbox-img" src="" alt="Zoomed"></div>
+
+    <div id="password-modal">
+        <div class="pwd-box">
+            <h3 class="text-4xl mb-6 drop-shadow-md pwd-title" style="color: var(--accent-pink); font-family: 'Dancing Script', cursive;">Mật khẩu là gì nhỉ?</h3>
+            <input type="password" id="pwd-input" class="pwd-input" placeholder="Nhập vào đây..." autocomplete="off">
+            <div id="pwd-error" class="pwd-error"></div>
+            <button class="next-btn show !translate-y-0 mx-auto block" onclick="checkPassword()">Mở thư</button>
+        </div>
+    </div>
+
+    <div id="stage-1" class="stage active">
+        <div id="env-wrapper">
+            <h1 class="text-5xl mb-2 text-center env-title" style="color: var(--accent-pink); font-family: 'Dancing Script', cursive;">Mở ra nhé...</h1>
+            <p class="text-gray-300 italic mb-4">Click vào phong bì để bắt đầu.</p>
+            <div class="env-container" id="envelope" onclick="requirePassword()">
+                <div class="env-back"></div>
+                <div class="env-letter"><h2 style="font-family: 'Dancing Script', cursive; font-size: 2rem; color: #ff4d6d; margin:0;">Gửi Em</h2></div>
+                <div class="env-front"></div>
+                <div class="env-bottom"></div>
+                <div class="env-flap"></div>
+                <div class="heart-seal">♥</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cảnh 2: Cuộn ảnh dọc -->
+    <div id="stage-2" class="stage">
+        <h2 class="text-4xl text-center mt-6 mb-4 drop-shadow-lg stage-title" style="font-family: 'Dancing Script', cursive; color: var(--accent-pink); z-index: 30; position:relative;">Kỷ Niệm Của Chúng Mình</h2>
+        
+        <div id="gallery-container" class="gallery-container">
+            <!-- Vùng 1: Chỉ chứa danh sách ảnh -->
+            <div id="gallery-images" style="width: 100%; display: flex; flex-direction: column; gap: 20px;"></div>
+            
+            <!-- Vùng 2: Nút Next luôn nằm cố định ở đáy (bottom) -->
+            <div id="next-btn-wrapper" class="text-center mt-6 mb-10 w-full">
+                <button id="btn-next-2" class="next-btn" onclick="goToStage(3)">Ngắm Khối Cầu Kỷ Niệm ➔</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cảnh 3: Khối cầu 3D trong suốt -->
+    <div id="stage-3" class="stage">
+        <div id="webgl-container"></div>
+        <div class="absolute bottom-8 w-full text-center z-30 pointer-events-none px-4">
+            <p class="text-white text-md md:text-lg mb-4 shadow-black drop-shadow-xl italic">Vuốt để xoay. Cuộn/Chụm 2 ngón tay để phóng to.</p>
+            <button id="btn-next-3" class="next-btn pointer-events-auto" onclick="goToStage(4)">Dòng chảy thời gian ➔</button>
+        </div>
+    </div>
+
+    <!-- Cảnh 4: Marquee cuộn ngang -->
+    <div id="stage-4" class="stage">
+        <div class="marquee-container">
+            <div class="marquee-wrapper scroll-left" id="marquee-row-1" style="animation-duration: 35s;">
+                <div class="marquee-content"></div><div class="marquee-content"></div>
+            </div>
+            <div class="marquee-wrapper scroll-right" id="marquee-row-2" style="animation-duration: 45s;">
+                <div class="marquee-content"></div><div class="marquee-content"></div>
+            </div>
+            <div class="marquee-wrapper scroll-left" id="marquee-row-3" style="animation-duration: 55s;">
+                <div class="marquee-content"></div><div class="marquee-content"></div>
+            </div>
+        </div>
+        <button class="next-btn show bottom-right-btn" onclick="goToStage(5)">Điều cuối cùng... ➔</button>
+    </div>
+
+    <!-- Cảnh 5: Lời nhắn cuối -->
+    <div id="stage-5" class="stage">
+        <div class="heart-wrapper">
+            <canvas id="heartCanvas" width="800" height="800" class="particle-heart-canvas"></canvas>
+            <div class="final-box">
+                <h1 class="text-5xl mb-4 stage-title" style="color: var(--accent-pink); font-family: 'Dancing Script', cursive; text-shadow: 0 4px 10px rgba(0,0,0,0.8);">Mãi Yêu Em</h1>
+                <p class="text-gray-100 mb-6 text-base md:text-lg font-medium drop-shadow-md">Dòng thời gian cứ trôi, nhưng kỷ niệm và tình yêu của chúng ta sẽ luôn đong đầy và còn mãi.</p>
+                <button class="next-btn show" style="background:transparent; border:2px solid #ff4d6d; color:#ff4d6d" onclick="location.reload()">Xem lại từ đầu</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
