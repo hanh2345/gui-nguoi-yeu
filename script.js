@@ -8,7 +8,7 @@ for (let i = shuffledImages.length - 1; i > 0; i--) {
 
 function getImg(id) { 
     const imgNumber = shuffledImages[id % TOTAL_IMAGES];
-    return `images/1(${imgNumber}).jpg`; 
+    return `images/1(${imgNumber}).jpg`;
 }
 
 const knownGoodImages = [];
